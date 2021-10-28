@@ -277,17 +277,33 @@ reindex-triplestore:
 	docker-compose exec -T drupal with-contenv bash -lc 'drush --root /var/www/drupal/web -l $${DRUPAL_DEFAULT_SITE_URL} vbo-exec content emit_node_event --configuration="queue=islandora-indexing-triplestore-index&event=Update"'
 	docker-compose exec -T drupal with-contenv bash -lc 'drush --root /var/www/drupal/web -l $${DRUPAL_DEFAULT_SITE_URL} vbo-exec media emit_media_event --configuration="queue=islandora-indexing-triplestore-index&event=Update"'
 
-# Helper to generate secrets & passwords, like so:
-# make generate-secrets
-.PHONY: generate-secrets
-.SILENT: generate-secrets
-generate-secrets:
-	docker run --rm -t \
-		-v $(CURDIR)/secrets:/secrets \
-		-v $(CURDIR)/scripts/generate-secrets.sh:/generate-secrets.sh \
-		-w / \
+# Helper function to generate keys for the user to use in their docker-compose.env.yml
+.PHONY: generate-jwt-keys
+.SILENT: generate-jwt-keys
+generate-jwt-keys:
+	docker run --rm -ti \
 		--entrypoint bash \
-		$(REPOSITORY)/drupal:$(TAG) -c "/generate-secrets.sh && chown -R `id -u`:`id -g` /secrets"
+		$(REPOSITORY)/drupal:$(TAG) -c \
+		"openssl genrsa -out /tmp/private.key 2048 &> /dev/null; \
+		openssl rsa -pubout -in /tmp/private.key -out /tmp/public.key &> /dev/null; \
+		echo $$'\nPrivate Key:\n'; \
+		cat /tmp/private.key; \
+		echo $$'\nPublic Key:\n'; \
+		cat /tmp/public.key; \
+		echo $$'\nCopy and paste these keys into your docker-compose.env.yml file where appropriate.'"
+
+# Helper to generate Matomo password, like so:
+# make generate-matomo-password MATOMO_USER_PASS=my_new_password
+.PHONY: generate-matomo-password
+.SILENT: generate-matomo-password
+generate-matomo-password:
+ifndef MATOMO_USER_PASS
+	$(error MATOMO_USER_PASS is not set)
+endif
+	docker run --rm -ti \
+		--entrypoint php \
+		$(REPOSITORY)/drupal:$(TAG) -r \
+		'echo password_hash(md5("$(MATOMO_USER_PASS)"), PASSWORD_DEFAULT) . "\n";'
 
 # Helper function to generate keys for the user to use in their docker-compose.env.yml
 .PHONY: download-default-certs
@@ -301,9 +317,21 @@ download-default-certs:
 		curl http://traefik.me/privkey.pem -o certs/privkey.pem; \
 	fi
 
+# Updating to Drupal 9
+update-drupal:
+	docker-compose exec -T drupal with-contenv bash -lc 'composer require aoelschlager/islandora_install_profile_demo:dev-after-make-local --no-update; composer require drupal/core-dev:^9.2 --dev --no-update'
+	docker-compose exec -T drupal with-contenv bash -lc 'composer update; composer dump-autoload'
+	docker-compose down
+	docker-compose up -d
+	docker-compose exec -T drupal with-contenv bash -lc 'drush updatedb -y'
+	$(MAKE) solr-cores
+	$(MAKE) namespaces
+	$(MAKE) run-islandora-migrations
+	docker-compose exec -T drupal drush cr -y
+
 .PHONY: demo
 .SILENT: demo
-demo: generate-secrets
+demo:
 	$(MAKE) download-default-certs ENVIROMENT=demo
 	$(MAKE) -B docker-compose.yml ENVIROMENT=demo
 	$(MAKE) pull ENVIROMENT=demo
@@ -322,9 +350,10 @@ demo: generate-secrets
 #	$(MAKE) reindex-solr ENVIROMENT=demo
 #	$(MAKE) reindex-triplestore ENVIROMENT=demo
 
+
 .PHONY: local
 .SILENT: local
-local: generate-secrets
+local:
 	$(MAKE) download-default-certs ENVIROMENT=local
 	$(MAKE) -B docker-compose.yml ENVIRONMENT=local
 	$(MAKE) pull ENVIRONMENT=local
@@ -333,8 +362,6 @@ local: generate-secrets
 		docker container run --rm -v $(CURDIR)/codebase:/home/root $(REPOSITORY)/nginx:$(TAG) with-contenv bash -lc 'git clone -b d9-update https://github.com/aOelschlager/islandora-sandbox.git /tmp/codebase; mv /tmp/codebase/* /home/root;'; \
 	fi
 	docker-compose up -d
-	#context greater than this commit hash is broken with certain Islandora contexts
-	docker-compose exec -T drupal with-contenv bash -lc "composer require drupal/context '4.x-dev#14c362a5c57457692cdb1335c24619e6ae76af94'"
 	docker-compose exec -T drupal with-contenv bash -lc 'composer install; chown -R nginx:nginx .'
 	$(MAKE) remove_standard_profile_references_from_config ENVIROMENT=local
 	$(MAKE) install ENVIRONMENT=local
@@ -342,43 +369,18 @@ local: generate-secrets
 	$(MAKE) set-files-owner SRC=$(CURDIR)/codebase ENVIROMENT=local
 	# The - at the beginning is not a typo, it will allow this process to failing the make command.
 	-docker-compose exec -T drupal with-contenv bash -lc 'mkdir -p /var/www/drupal/config/sync && chmod -R 775 /var/www/drupal/config/sync'
-	docker-compose exec -T drupal with-contenv bash -lc 'chown -R `id -u`:101 /var/www/drupal'
-	# $(MAKE) initial_content
-	$(MAKE) login
-
-.PHONY: initial_content
-initial_content:
-	curl -u admin:$(shell cat secrets/live/DRUPAL_DEFAULT_ACCOUNT_PASSWORD) -H "Content-Type: application/json" -d "@demo-data/homepage.json" https://${DOMAIN}/node?_format=json
-	curl -u admin:$(shell cat secrets/live/DRUPAL_DEFAULT_ACCOUNT_PASSWORD) -H "Content-Type: application/json" -d "@demo-data/browse-collections.json" https://${DOMAIN}/node?_format=json
+	sudo chown -R `id -u`:101 codebase
+	$(MAKE) update-drupal
 
 # Destroys everything beware!
 .PHONY: clean
+.SILENT: clean
 clean:
 	echo "**DANGER** About to rm your SERVER data subdirs, your docker volumes and your codebase/web"
 	$(MAKE) confirm
 	-docker-compose down -v
-	sudo rm -fr codebase certs secrets/live/*
+	sudo rm -fr codebase certs
 	git clean -xffd .
-
-.PHONY: up
-.SILENT: up
-up:
-	test -f docker-compose.yml && docker-compose up -d --remove-orphans || $(MAKE) demo
-	@echo "\n Sleeping for 10 seconds to wait for Drupal to finish building.\n"
-	sleep 10
-	docker-compose exec -T drupal with-contenv bash -lc "for_all_sites update_settings_php"
-
-.PHONY: down
-.SILENT: down
-down:
-	-docker-compose down --remove-orphans
-
-.PHONY: login
-.SILENT: login
-login:
-	echo "\n\n=========== LOGIN ==========="
-	docker-compose exec -T drupal with-contenv bash -lc "drush uli --uri=$(DOMAIN)"
-	echo "=============================\n"
 
 .phony: confirm
 confirm:

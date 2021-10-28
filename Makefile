@@ -318,15 +318,14 @@ download-default-certs:
 	fi
 
 # Updating to Drupal 9
+# The drush installer had a bunch of issues when moving straight to Drupal 9 and wouldn't work.
+# This works but it would be nice to be able to use the installer again.
 update-drupal:
 	docker-compose exec -T drupal with-contenv bash -lc 'composer require aoelschlager/islandora_install_profile_demo:dev-after-make-local --no-update; composer require drupal/core-dev:^9.2 --dev --no-update'
 	docker-compose exec -T drupal with-contenv bash -lc 'composer update; composer dump-autoload'
 	docker-compose down
 	docker-compose up -d
 	docker-compose exec -T drupal with-contenv bash -lc 'drush updatedb -y'
-	$(MAKE) solr-cores
-	$(MAKE) namespaces
-	$(MAKE) run-islandora-migrations
 	docker-compose exec -T drupal drush cr -y
 
 .PHONY: demo

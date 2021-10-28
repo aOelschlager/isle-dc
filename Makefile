@@ -330,7 +330,7 @@ local: generate-secrets
 	$(MAKE) pull ENVIRONMENT=local
 	mkdir -p $(CURDIR)/codebase
 	if [ -z "$$(ls -A $(CURDIR)/codebase)" ]; then \
-		docker container run --rm -v $(CURDIR)/codebase:/home/root $(REPOSITORY)/nginx:$(TAG) with-contenv bash -lc 'git clone -b git clone -b d9-update https://github.com/aOelschlager/islandora-sandbox.git /tmp/codebase; mv /tmp/codebase/* /home/root;'; \
+		docker container run --rm -v $(CURDIR)/codebase:/home/root $(REPOSITORY)/nginx:$(TAG) with-contenv bash -lc 'git clone -b d9-update https://github.com/aOelschlager/islandora-sandbox.git /tmp/codebase; mv /tmp/codebase/* /home/root;'; \
 	fi
 	docker-compose up -d
 	#context greater than this commit hash is broken with certain Islandora contexts

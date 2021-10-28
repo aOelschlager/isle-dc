@@ -321,6 +321,8 @@ download-default-certs:
 # The drush installer had a bunch of issues when moving straight to Drupal 9 and wouldn't work.
 # This works but it would be nice to be able to use the installer again.
 update-drupal:
+#	This needs to run in the install profile directory
+#	docker-compose exec -T drupal with-contenv bash -lc 'git remote set-url origin https://github.com/aOelschlager/islandora_install_profile_demo.git'
 	docker-compose exec -T drupal with-contenv bash -lc 'composer require aoelschlager/islandora_install_profile_demo:dev-after-make-local --no-update; composer require drupal/core-dev:^9.2 --dev --no-update'
 	docker-compose exec -T drupal with-contenv bash -lc 'composer update; composer dump-autoload'
 	docker-compose down

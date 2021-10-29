@@ -361,7 +361,7 @@ local:
 		docker container run --rm -v $(CURDIR)/codebase:/home/root $(REPOSITORY)/nginx:$(TAG) with-contenv bash -lc 'git clone -b d9-update https://github.com/aOelschlager/islandora-sandbox.git /tmp/codebase; mv /tmp/codebase/* /home/root;'; \
 	fi
 	docker-compose up -d
-	docker-compose exec -T drupal with-contenv bash -lc 'composer install; chown -R nginx:nginx .'
+	docker-compose exec -T drupal with-contenv bash -lc 'composer update; composer install; chown -R nginx:nginx .'
 	$(MAKE) remove_standard_profile_references_from_config ENVIROMENT=local
 	$(MAKE) install ENVIRONMENT=local
 	$(MAKE) hydrate ENVIRONMENT=local
@@ -369,7 +369,7 @@ local:
 	# The - at the beginning is not a typo, it will allow this process to failing the make command.
 	-docker-compose exec -T drupal with-contenv bash -lc 'mkdir -p /var/www/drupal/config/sync && chmod -R 775 /var/www/drupal/config/sync'
 	sudo chown -R `id -u`:101 codebase
-	$(MAKE) update-drupal
+	#$(MAKE) update-drupal
 
 # Destroys everything beware!
 .PHONY: clean

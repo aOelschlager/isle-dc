@@ -369,7 +369,7 @@ local:
 	# The - at the beginning is not a typo, it will allow this process to failing the make command.
 	-docker-compose exec -T drupal with-contenv bash -lc 'mkdir -p /var/www/drupal/config/sync && chmod -R 775 /var/www/drupal/config/sync'
 	sudo chown -R `id -u`:101 codebase
-	#$(MAKE) update-drupal
+	$(MAKE) update-drupal
 
 # Destroys everything beware!
 .PHONY: clean

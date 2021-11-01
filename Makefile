@@ -320,6 +320,7 @@ download-default-certs:
 # Updating to Drupal 9
 # The drush installer had a bunch of issues when moving straight to Drupal 9 and wouldn't work.
 # This works but it would be nice to be able to use the installer again.
+#UPDATE: This has been fixed but I am keeping this here for reference.
 update-drupal:
 	docker-compose exec -T drupal with-contenv bash -lc 'composer require islandora/islandora_install_profile_demo:dev-after-make-local --no-update; composer require drupal/core-dev:^9.2 --dev --no-update'
 	docker-compose exec -T drupal with-contenv bash -lc 'composer update; composer dump-autoload'
@@ -358,10 +359,10 @@ local:
 	$(MAKE) pull ENVIRONMENT=local
 	mkdir -p $(CURDIR)/codebase
 	if [ -z "$$(ls -A $(CURDIR)/codebase)" ]; then \
-		docker container run --rm -v $(CURDIR)/codebase:/home/root $(REPOSITORY)/nginx:$(TAG) with-contenv bash -lc 'git clone -b d9-update https://github.com/aOelschlager/islandora-sandbox.git /tmp/codebase; mv /tmp/codebase/* /home/root;'; \
+		docker container run --rm -v $(CURDIR)/codebase:/home/root $(REPOSITORY)/nginx:$(TAG) with-contenv bash -lc 'git clone -b install-profile-tweaks https://github.com/aOelschlager/islandora-sandbox.git /tmp/codebase; mv /tmp/codebase/* /home/root;'; \
 	fi
 	docker-compose up -d
-	docker-compose exec -T drupal with-contenv bash -lc 'composer update; composer install; chown -R nginx:nginx .'
+	docker-compose exec -T drupal with-contenv bash -lc 'composer install; chown -R nginx:nginx .'
 	$(MAKE) remove_standard_profile_references_from_config ENVIROMENT=local
 	$(MAKE) install ENVIRONMENT=local
 	$(MAKE) hydrate ENVIRONMENT=local
@@ -369,7 +370,7 @@ local:
 	# The - at the beginning is not a typo, it will allow this process to failing the make command.
 	-docker-compose exec -T drupal with-contenv bash -lc 'mkdir -p /var/www/drupal/config/sync && chmod -R 775 /var/www/drupal/config/sync'
 	sudo chown -R `id -u`:101 codebase
-	$(MAKE) update-drupal
+	#$(MAKE) update-drupal
 
 # Destroys everything beware!
 .PHONY: clean

@@ -336,6 +336,7 @@ demo: generate-secrets
 	$(MAKE) reindex-fcrepo-metadata ENVIROMENT=demo
 	$(MAKE) reindex-solr ENVIROMENT=demo
 	$(MAKE) reindex-triplestore ENVIROMENT=demo
+	$(MAKE) login
 
 .PHONY: local
 .SILENT: local
@@ -359,7 +360,7 @@ local: generate-secrets
 	$(MAKE) login
 
 .PHONY: demo-install-profile
-.SILENT: demo-instal-profile
+.SILENT: demo-install-profile
 demo-install-profile: generate-secrets
 	$(MAKE) download-default-certs ENVIROMENT=demo
 	$(MAKE) -B docker-compose.yml ENVIROMENT=demo
@@ -368,11 +369,13 @@ demo-install-profile: generate-secrets
 	docker-compose up -d --remove-orphans
 	@echo "\n Sleeping for 10 seconds to wait for Drupal to finish initializing.\n"
 	sleep 10
-	$(MAKE) install
+	sed -i 's/^DRUPAL_INSTALL_PROFILE=standard/DRUPAL_INSTALL_PROFILE=islandora_install_profile_demo /g' .env
+	$(MAKE) install ENVIROMENT=demo DRUPAL_INSTALL_PROFILE=islandora_install_profile_demo
 	$(MAKE) update-settings-php ENVIROMENT=demo
+	docker-compose exec -T drupal with-contenv bash -lc "drush en -y search_api_solr_defaults islandora_defaults"
 	$(MAKE) hydrate ENVIROMENT=demo
 	docker-compose exec -T drupal with-contenv bash -lc 'drush --root /var/www/drupal/web -l $${DRUPAL_DEFAULT_SITE_URL} upwd admin $${DRUPAL_DEFAULT_ACCOUNT_PASSWORD}'
-	docker-compose exec -T drupal with-contenv bash -lc 'drush migrate:rollback islandora_defaults_tags,islandora_tags'
+	#docker-compose exec -T drupal with-contenv bash -lc 'drush migrate:rollback islandora_defaults_tags,islandora_tags'
 	$(MAKE) initial_content
 	$(MAKE) login
 
@@ -390,12 +393,14 @@ local-install-profile: generate-secrets
 	docker-compose up -d --remove-orphans
 	docker-compose exec -T drupal with-contenv bash -lc 'composer install; chown -R nginx:nginx .'
 	$(MAKE) remove_standard_profile_references_from_config ENVIROMENT=local
-	$(MAKE) install ENVIRONMENT=local
+	sed -i 's/^DRUPAL_INSTALL_PROFILE=standard/DRUPAL_INSTALL_PROFILE=islandora_install_profile_demo /g' .env
+	$(MAKE) install ENVIRONMENT=local DRUPAL_INSTALL_PROFILE=islandora_install_profile_demo
+	docker-compose exec -T drupal with-contenv bash -lc "drush en -y search_api_solr_defaults islandora_defaults"
 	$(MAKE) hydrate ENVIRONMENT=local
 	# The - at the beginning is not a typo, it will allow this process to failing the make command.
 	-docker-compose exec -T drupal with-contenv bash -lc 'mkdir -p /var/www/drupal/config/sync && chmod -R 775 /var/www/drupal/config/sync'
 	docker-compose exec -T drupal with-contenv bash -lc 'chown -R `id -u`:101 /var/www/drupal'
-	docker-compose exec -T drupal with-contenv bash -lc 'drush migrate:rollback islandora_defaults_tags,islandora_tags'
+	#docker-compose exec -T drupal with-contenv bash -lc 'drush migrate:rollback islandora_defaults_tags,islandora_tags'
 	$(MAKE) initial_content
 	$(MAKE) login
 

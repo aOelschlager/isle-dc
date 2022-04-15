@@ -320,21 +320,8 @@ download-default-certs:
 .SILENT: demo
 ## Make a demo site.
 demo: generate-secrets
-	$(MAKE) download-default-certs ENVIROMENT=demo
-	$(MAKE) -B docker-compose.yml ENVIROMENT=demo
-	$(MAKE) pull ENVIROMENT=demo
-	mkdir -p "$(CURDIR)/codebase"
-	docker-compose up -d
-	$(MAKE) update-settings-php ENVIROMENT=demo
-	$(MAKE) drupal-public-files-import SRC="$(CURDIR)/demo-data/public-files.tgz" ENVIROMENT=demo
-	$(MAKE) drupal-database ENVIROMENT=demo
-	$(MAKE) drupal-database-import SRC="$(CURDIR)/demo-data/drupal.sql" ENVIROMENT=demo
-	$(MAKE) hydrate ENVIROMENT=demo
-	docker-compose exec -T drupal with-contenv bash -lc 'drush --root /var/www/drupal/web -l $${DRUPAL_DEFAULT_SITE_URL} upwd admin $${DRUPAL_DEFAULT_ACCOUNT_PASSWORD}'
-	$(MAKE) fcrepo-import SRC="$(CURDIR)/demo-data/fcrepo-export.tgz" ENVIROMENT=demo
-	$(MAKE) reindex-fcrepo-metadata ENVIROMENT=demo
-	$(MAKE) reindex-solr ENVIROMENT=demo
-	$(MAKE) reindex-triplestore ENVIROMENT=demo
+	$(MAKE) local
+	$(MAKE) demo_content
 	$(MAKE) login
 
 .PHONY: local
@@ -358,6 +345,14 @@ local: generate-secrets
 	$(MAKE) set-files-owner SRC="$(CURDIR)/codebase" ENVIROMENT=local
 	$(MAKE) login
 
+.PHONY: demo-install-profile
+## Make a local site from the install-profile and TODO then add demo content
+.SILENT: demo-instal-profile
+demo-install-profile: generate-secrets
+	$(MAKE) local-install-profile
+	$(MAKE) demo_content
+	$(MAKE) login
+
 .PHONY: local-install-profile
 ## Make a local site with codebase directory bind mounted, modeled after sandbox.islandora.ca
 local-install-profile: generate-secrets
@@ -376,18 +371,28 @@ local-install-profile: generate-secrets
 	$(MAKE) delete-shortcut-entities && docker-compose exec -T drupal with-contenv bash -lc "drush pm:un -y shortcut"
 	docker-compose exec -T drupal with-contenv bash -lc "drush en -y migrate_tools"
 	$(MAKE) hydrate ENVIRONMENT=local
-	# The - at the beginning is not a typo, it will allow this process to failing the make command.
 	-docker-compose exec -T drupal with-contenv bash -lc 'mkdir -p /var/www/drupal/config/sync && chmod -R 775 /var/www/drupal/config/sync'
 	#docker-compose exec -T drupal with-contenv bash -lc 'chown -R `id -u`:nginx /var/www/drupal'
 	docker-compose exec -T drupal with-contenv bash -lc 'drush migrate:rollback islandora_defaults_tags,islandora_tags'
-	$(MAKE) initial_content
-	$(MAKE) login
-
-.PHONY: initial_content
-## Helper function for the install profile: create a homepage and browse-collections page
-initial_content:
 	curl -k -u admin:$(shell cat secrets/live/DRUPAL_DEFAULT_ACCOUNT_PASSWORD) -H "Content-Type: application/json" -d "@demo-data/homepage.json" https://${DOMAIN}/node?_format=json
 	curl -k -u admin:$(shell cat secrets/live/DRUPAL_DEFAULT_ACCOUNT_PASSWORD) -H "Content-Type: application/json" -d "@demo-data/browse-collections.json" https://${DOMAIN}/node?_format=json
+	$(MAKE) login
+
+.PHONY: demo_content
+## Helper function for demo sites: do a workbench import of sample objects
+demo_content:
+	# fetch repo that has csv and binaries to data/samples
+	# if prod do this by default
+	# if [ -d "islandora_workbench" ]; then rm -rf islandora_workbench; fi
+	[ -d "islandora_workbench" ] || git clone -b staging --single-branch https://github.com/DonRichards/islandora_workbench
+ifeq ($(shell uname -s),Linux)
+	sed -i 's/^password.*/password\: $(shell cat secrets/live/DRUPAL_DEFAULT_ACCOUNT_PASSWORD) /g' islandora_workbench/demoBDcreate*
+endif
+ifeq ($(shell uname -s),Darwin)
+	sed -i '' 's/^password.*/password\: $(shell cat secrets/live/DRUPAL_DEFAULT_ACCOUNT_PASSWORD) /g' islandora_workbench/demoBDcreate*
+endif
+	cd islandora_workbench && docker build -t workbench-docker .
+	cd islandora_workbench && docker run -it --rm --network="host" -v $(shell pwd)/islandora_workbench:/workbench --name my-running-workbench workbench-docker bash -lc "(cd /workbench && python setup.py install --user && ./workbench --config demoBDcreate_all_localhost.yml)"
 
 .PHONY: clean
 .SILENT: clean

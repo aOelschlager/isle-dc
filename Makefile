@@ -83,6 +83,7 @@ docker-compose.yml: $(SERVICES:%=docker-compose.%.yml) .env
 	docker-compose $(SERVICES:%=-f docker-compose.%.yml) config > docker-compose.yml
 
 .PHONY: pull
+## Fetches the latest images from the registry.
 pull: docker-compose.yml
 ifeq ($(REPOSITORY), local)
 	# Only need to pull external services if using local images.
@@ -92,8 +93,8 @@ else
 endif
 
 .PHONY: build
+## Create Dockerfile from example if it does not exist.
 build:
-	# Create Dockerfile from example if it does not exist.
 	if [ ! -f $(PROJECT_DRUPAL_DOCKERFILE) ]; then \
 		cp $(CURDIR)/sample.Dockerfile $(PROJECT_DRUPAL_DOCKERFILE); \
 	fi
@@ -136,8 +137,6 @@ update-settings-php:
 update-config-from-environment:
 	-docker-compose exec -T drupal with-contenv bash -lc "for_all_sites configure_islandora_module"
 	-docker-compose exec -T drupal with-contenv bash -lc "for_all_sites configure_jwt_module"
-	-docker-compose exec -T drupal with-contenv bash -lc "for_all_sites configure_islandora_default_module"
-	-docker-compose exec -T drupal with-contenv bash -lc "for_all_sites configure_search_api_solr_module"
 	-docker-compose exec -T drupal with-contenv bash -lc "for_all_sites configure_matomo_module"
 	-docker-compose exec -T drupal with-contenv bash -lc "for_all_sites configure_openseadragon"
 	-docker-compose exec -T drupal with-contenv bash -lc "for_all_sites configure_islandora_default_module"
@@ -160,9 +159,9 @@ solr-cores:
 namespaces:
 	docker-compose exec -T drupal with-contenv bash -lc "for_all_sites create_blazegraph_namespace_with_default_properties"
 
-# Reconstitute the site from environment variables.
 .PHONY: hydrate
 .SILENT: hydrate
+## Reconstitute the site from environment variables.
 hydrate: update-settings-php update-config-from-environment solr-cores namespaces run-islandora-migrations
 	docker-compose exec -T drupal drush cr -y
 
@@ -187,16 +186,16 @@ set-site-uuid:
 remove_standard_profile_references_from_config:
 	docker-compose exec -T drupal with-contenv bash -lc "remove_standard_profile_references_from_config"
 
-# Exports the sites configuration.
 .PHONY: config-export
 .SILENT: config-export
+## Exports the sites configuration.
 config-export:
 	docker-compose exec -T drupal drush -l $(SITE) config:export -y
 
-# Import the sites configuration.
-# N.B You may need to run this multiple times in succession due to errors in the configurations dependencies.
+
 .PHONY: config-import
 .SILENT: config-import
+## Import the sites configuration. N.B You may need to run this multiple times in succession due to errors in the configurations dependencies.
 config-import: set-site-uuid delete-shortcut-entities
 	docker-compose exec -T drupal drush -l $(SITE) config:import -y
 
@@ -277,33 +276,17 @@ reindex-triplestore:
 	docker-compose exec -T drupal with-contenv bash -lc 'drush --root /var/www/drupal/web -l $${DRUPAL_DEFAULT_SITE_URL} vbo-exec content emit_node_event --configuration="queue=islandora-indexing-triplestore-index&event=Update"'
 	docker-compose exec -T drupal with-contenv bash -lc 'drush --root /var/www/drupal/web -l $${DRUPAL_DEFAULT_SITE_URL} vbo-exec media emit_media_event --configuration="queue=islandora-indexing-triplestore-index&event=Update"'
 
-# Helper function to generate keys for the user to use in their docker-compose.env.yml
-.PHONY: generate-jwt-keys
-.SILENT: generate-jwt-keys
-generate-jwt-keys:
-	docker run --rm -ti \
+# Helper to generate secrets & passwords, like so:
+# make generate-secrets
+.PHONY: generate-secrets
+.SILENT: generate-secrets
+generate-secrets:
+	docker run --rm -t \
+		-v $(CURDIR)/secrets:/secrets \
+		-v $(CURDIR)/scripts/generate-secrets.sh:/generate-secrets.sh \
+		-w / \
 		--entrypoint bash \
-		$(REPOSITORY)/drupal:$(TAG) -c \
-		"openssl genrsa -out /tmp/private.key 2048 &> /dev/null; \
-		openssl rsa -pubout -in /tmp/private.key -out /tmp/public.key &> /dev/null; \
-		echo $$'\nPrivate Key:\n'; \
-		cat /tmp/private.key; \
-		echo $$'\nPublic Key:\n'; \
-		cat /tmp/public.key; \
-		echo $$'\nCopy and paste these keys into your docker-compose.env.yml file where appropriate.'"
-
-# Helper to generate Matomo password, like so:
-# make generate-matomo-password MATOMO_USER_PASS=my_new_password
-.PHONY: generate-matomo-password
-.SILENT: generate-matomo-password
-generate-matomo-password:
-ifndef MATOMO_USER_PASS
-	$(error MATOMO_USER_PASS is not set)
-endif
-	docker run --rm -ti \
-		--entrypoint php \
-		$(REPOSITORY)/drupal:$(TAG) -r \
-		'echo password_hash(md5("$(MATOMO_USER_PASS)"), PASSWORD_DEFAULT) . "\n";'
+		$(REPOSITORY)/drupal:$(TAG) -c "/generate-secrets.sh && chown -R `id -u`:`id -g` /secrets"
 
 # Helper function to generate keys for the user to use in their docker-compose.env.yml
 .PHONY: download-default-certs
@@ -317,49 +300,36 @@ download-default-certs:
 		curl http://traefik.me/privkey.pem -o certs/privkey.pem; \
 	fi
 
-# Updating to Drupal 9
-# The drush installer had a bunch of issues when moving straight to Drupal 9 and wouldn't work.
-# This works but it would be nice to be able to use the installer again.
-#UPDATE: This has been fixed but I am keeping this here for reference.
-update-drupal:
-	docker-compose exec -T drupal with-contenv bash -lc 'composer require islandora/islandora_install_profile_demo:dev-after-make-local --no-update; composer require drupal/core-dev:^9.2 --dev --no-update'
-	docker-compose exec -T drupal with-contenv bash -lc 'composer update; composer dump-autoload'
-	docker-compose down
-	docker-compose up -d
-	docker-compose exec -T drupal with-contenv bash -lc 'drush updatedb -y'
-	docker-compose exec -T drupal drush cr -y
-
 .PHONY: demo
 .SILENT: demo
-demo:
+## Make a demo site.
+demo: generate-secrets
 	$(MAKE) download-default-certs ENVIROMENT=demo
 	$(MAKE) -B docker-compose.yml ENVIROMENT=demo
 	$(MAKE) pull ENVIROMENT=demo
 	mkdir -p $(CURDIR)/codebase
 	docker-compose up -d
-	docker-compose exec -T drupal with-contenv bash -lc 'composer update'
-	$(MAKE) install ENVIRONMENT=demo
 	$(MAKE) update-settings-php ENVIROMENT=demo
-#	$(MAKE) drupal-public-files-import SRC=$(CURDIR)/demo-data/public-files.tgz ENVIROMENT=demo
-#	$(MAKE) drupal-database ENVIROMENT=demo
-#	$(MAKE) drupal-database-import SRC=$(CURDIR)/demo-data/drupal.sql ENVIROMENT=demo
+	$(MAKE) drupal-public-files-import SRC=$(CURDIR)/demo-data/public-files.tgz ENVIROMENT=demo
+	$(MAKE) drupal-database ENVIROMENT=demo
+	$(MAKE) drupal-database-import SRC=$(CURDIR)/demo-data/drupal.sql ENVIROMENT=demo
 	$(MAKE) hydrate ENVIROMENT=demo
 	docker-compose exec -T drupal with-contenv bash -lc 'drush --root /var/www/drupal/web -l $${DRUPAL_DEFAULT_SITE_URL} upwd admin $${DRUPAL_DEFAULT_ACCOUNT_PASSWORD}'
-#	$(MAKE) fcrepo-import SRC=$(CURDIR)/demo-data/fcrepo-export.tgz ENVIROMENT=demo
-#	$(MAKE) reindex-fcrepo-metadata ENVIROMENT=demo
-#	$(MAKE) reindex-solr ENVIROMENT=demo
-#	$(MAKE) reindex-triplestore ENVIROMENT=demo
-
+	$(MAKE) fcrepo-import SRC=$(CURDIR)/demo-data/fcrepo-export.tgz ENVIROMENT=demo
+	$(MAKE) reindex-fcrepo-metadata ENVIROMENT=demo
+	$(MAKE) reindex-solr ENVIROMENT=demo
+	$(MAKE) reindex-triplestore ENVIROMENT=demo
 
 .PHONY: local
 .SILENT: local
-local:
+## Make a local site with codebase directory bind mounted.
+local: generate-secrets
 	$(MAKE) download-default-certs ENVIROMENT=local
 	$(MAKE) -B docker-compose.yml ENVIRONMENT=local
 	$(MAKE) pull ENVIRONMENT=local
 	mkdir -p $(CURDIR)/codebase
 	if [ -z "$$(ls -A $(CURDIR)/codebase)" ]; then \
-		docker container run --rm -v $(CURDIR)/codebase:/home/root $(REPOSITORY)/nginx:$(TAG) with-contenv bash -lc 'git clone -b install-profile-bd-dev https://github.com/aOelschlager/islandora-sandbox.git /tmp/codebase; mv /tmp/codebase/* /home/root;'; \
+		docker container run --rm -v $(CURDIR)/codebase:/home/root $(REPOSITORY)/nginx:$(TAG) with-contenv bash -lc 'composer create-project drupal/recommended-project:^9.1 /tmp/codebase; mv /tmp/codebase/* /home/root; cd /home/root; composer config minimum-stability dev; composer require islandora/islandora:dev-8.x-1.x; composer require drush/drush:^10.3'; \
 	fi
 	docker-compose up -d
 	docker-compose exec -T drupal with-contenv bash -lc 'composer install; chown -R nginx:nginx .'
@@ -367,21 +337,141 @@ local:
 	$(MAKE) install ENVIRONMENT=local
 	$(MAKE) hydrate ENVIRONMENT=local
 	$(MAKE) set-files-owner SRC=$(CURDIR)/codebase ENVIROMENT=local
+
+.PHONY: demo-install-profile
+.SILENT: demo-instal-profile
+demo-install-profile: generate-secrets
+	$(MAKE) download-default-certs ENVIROMENT=demo
+	$(MAKE) -B docker-compose.yml ENVIROMENT=demo
+	$(MAKE) pull ENVIROMENT=demo
+	mkdir -p $(CURDIR)/codebase
+	docker-compose up -d --remove-orphans
+	@echo "\n Sleeping for 10 seconds to wait for Drupal to finish initializing.\n"
+	sleep 10
+	$(MAKE) install
+	$(MAKE) update-settings-php ENVIROMENT=demo
+	$(MAKE) hydrate ENVIROMENT=demo
+	docker-compose exec -T drupal with-contenv bash -lc 'drush --root /var/www/drupal/web -l $${DRUPAL_DEFAULT_SITE_URL} upwd admin $${DRUPAL_DEFAULT_ACCOUNT_PASSWORD}'
+	docker-compose exec -T drupal with-contenv bash -lc 'drush migrate:rollback islandora_defaults_tags,islandora_tags'
+	$(MAKE) initial_content
+	$(MAKE) login
+
+.PHONY: local-install-profile
+.SILENT: local-install-profile
+local-install-profile: generate-secrets
+	$(MAKE) download-default-certs ENVIROMENT=local
+	$(MAKE) -B docker-compose.yml ENVIRONMENT=local
+	$(MAKE) pull ENVIRONMENT=local
+	mkdir -p $(CURDIR)/codebase
+	if [ -z "$$(ls -A $(CURDIR)/codebase)" ]; then \
+		docker container run --rm -v $(CURDIR)/codebase:/home/root $(REPOSITORY)/nginx:$(TAG) with-contenv bash -lc 'git clone -b main-dev https://github.com/aOelschlager/islandora-sandbox /tmp/codebase; mv /tmp/codebase/* /home/root;'; \
+	fi
+	$(MAKE) set-files-owner SRC=$(CURDIR)/codebase ENVIROMENT=local
+	docker-compose up -d --remove-orphans
+	docker-compose exec -T drupal with-contenv bash -lc 'composer install; chown -R nginx:nginx .'
+	$(MAKE) remove_standard_profile_references_from_config ENVIROMENT=local
+	$(MAKE) install ENVIRONMENT=local
+	$(MAKE) hydrate ENVIRONMENT=local
 	# The - at the beginning is not a typo, it will allow this process to failing the make command.
 	-docker-compose exec -T drupal with-contenv bash -lc 'mkdir -p /var/www/drupal/config/sync && chmod -R 775 /var/www/drupal/config/sync'
-	sudo chown -R `id -u`:101 codebase
-	#$(MAKE) update-drupal
+	docker-compose exec -T drupal with-contenv bash -lc 'chown -R `id -u`:101 /var/www/drupal'
+	docker-compose exec -T drupal with-contenv bash -lc 'drush migrate:rollback islandora_defaults_tags,islandora_tags'
+	$(MAKE) fix-masonry
+	$(MAKE) fix-pdfjs
+	$(MAKE) initial_content
+	$(MAKE) login
 
-# Destroys everything beware!
+.PHONY: initial_content
+initial_content:
+	curl -u admin:$(shell cat secrets/live/DRUPAL_DEFAULT_ACCOUNT_PASSWORD) -H "Content-Type: application/json" -d "@demo-data/homepage.json" https://${DOMAIN}/node?_format=json
+	curl -u admin:$(shell cat secrets/live/DRUPAL_DEFAULT_ACCOUNT_PASSWORD) -H "Content-Type: application/json" -d "@demo-data/browse-collections.json" https://${DOMAIN}/node?_format=json
+
+.PHONY: login
+.SILENT: login
+login:
+	echo "\n\n=========== LOGIN ==========="
+	docker-compose exec -T drupal with-contenv bash -lc "drush uli --uri=$(DOMAIN)"
+	echo "=============================\n"
+
 .PHONY: clean
 .SILENT: clean
+## Destroys everything beware!
 clean:
-	echo "**DANGER** About to rm your SERVER data subdirs, your docker volumes and your codebase/web"
-	$(MAKE) confirm
 	-docker-compose down -v
-	sudo rm -fr codebase certs
+	sudo rm -fr codebase certs secrets/live/*
 	git clean -xffd .
 
-.phony: confirm
-confirm:
-	@echo -n "Are you sure you want to continue and drop your data? [y/N] " && read ans && [ $${ans:-N} = y ]
+.PHONY: up
+.SILENT: up
+## Brings up the containers or builds demo if no containers were found.
+up:
+	test -f docker-compose.yml && docker-compose up -d --remove-orphans || $(MAKE) demo
+	@echo "\n Sleeping for 10 seconds to wait for Drupal to finish building.\n"
+	sleep 10
+	docker-compose exec -T drupal with-contenv bash -lc "for_all_sites update_settings_php"
+
+.PHONY: down
+.SILENT: down
+down:
+	-docker-compose down --remove-orphans
+
+GREEN  := $(shell tput -Txterm setaf 2)
+YELLOW := $(shell tput -Txterm setaf 3)
+WHITE  := $(shell tput -Txterm setaf 7)
+RESET  := $(shell tput -Txterm sgr0)
+TARGET_MAX_CHAR_NUM=20
+
+.PHONY: help
+.SILENT: help
+help:
+	@echo ''
+	@echo 'Usage:'
+	@echo '  ${YELLOW}make${RESET} ${GREEN}<target>${RESET}'
+	@echo ''
+	@echo 'Targets:'
+	# @grep '^.PHONY: .* #' Makefile | sed 's/\.PHONY: \(.*\) # \(.*\)/\1 \2/'
+	@awk '/^[a-zA-Z\-\_0-9]+:/ { \
+		helpMessage = match(lastLine, /^## (.*)/); \
+		if (helpMessage) { \
+			helpCommand = $$1; sub(/:$$/, "", helpCommand); \
+			helpMessage = substr(lastLine, RSTART + 3, RLENGTH); \
+			printf "  ${YELLOW}%-$(TARGET_MAX_CHAR_NUM)s${RESET} ${GREEN}%s${RESET}\n", helpCommand, helpMessage; \
+		} \
+	} \
+	{lastLine = $$0}' $(MAKEFILE_LIST)
+
+IS_DRUPAL_PSSWD_FILE_READABLE := $(shell test -r secrets/live/DRUPAL_DEFAULT_ACCOUNT_PASSWORD -a -w secrets/live/DRUPAL_DEFAULT_ACCOUNT_PASSWORD && echo 1 || echo 0)
+CMD := $(shell [ $(IS_DRUPAL_PSSWD_FILE_READABLE) -eq 1 ] && echo 'tee' || echo 'sudo -k tee')
+
+.PHONY: set_admin_password
+.SILENT: set_admin_password
+## Sets the admin password and accomodates for permissions restrictions to the secrets directory. Only runs sudo when needed.
+set_admin_password:
+	@$(eval PASSWORD ?= $(shell bash -c 'read -s -p "New Password: " pwd; echo $$pwd'))
+	@echo "\n\nSetting admin password now"
+	docker-compose exec -T drupal with-contenv bash -lc 'drush user:password admin "$(PASSWORD)"'
+	echo "$(PASSWORD)" | $(CMD) secrets/live/DRUPAL_DEFAULT_ACCOUNT_PASSWORD >> /dev/null
+	@echo "\ndone."
+
+LATEST_VERSION := $(shell curl -s https://api.github.com/repos/desandro/masonry/releases/latest | grep '\"tag_name\":' | sed -E 's/.*\"([^\"]+)\".*/\1/')
+
+.PHONY: fix-masonry
+.SILENT: fix-masonry
+## Fix missing masonry library.
+fix-masonry:
+	@echo "Latest version of masonry library is ${LATEST_VERSION}"
+	docker-compose exec drupal bash -lc "[ -d '/var/www/drupal/web/libraries' ] && exit ; mkdir -p /var/www/drupal/web/libraries ; chmod 755 /var/www/drupal/web/libraries ; chown 1000:nginx /var/www/drupal/web/libraries"
+	docker-compose exec drupal bash -lc "cd /var/www/drupal/web/libraries/ ; [ ! -d '/var/www/drupal/web/libraries/masonry' ] && git clone --quiet --branch ${LATEST_VERSION} https://github.com/desandro/masonry.git || echo Ready"
+	docker-compose exec drupal bash -lc "cd /var/www/drupal/web/libraries/ ; [ -d '/var/www/drupal/web/libraries/masonry' ] && chmod -R 755 /var/www/drupal/web/libraries/masonry ; chown -R 1000:nginx /var/www/drupal/web/libraries/masonry"
+
+PDFJS_VERSION := 2.0.943
+
+.PHONY: fix-pdfjs
+.SILENT: fix-pdfjs
+## Fix missing pdfjs.
+fix-pdfjs:
+	@echo "Version of pdfjs is $${PDFJS_VERSION} downloading."
+	docker-compose exec drupal bash -lc "cd /var/www/drupal/web/libraries ; [ ! -d '/var/www/drupal/web/libraries/pdf.js' ] && curl -b cookie.txt -L https://github.com/mozilla/pdf.js/releases/download/v$${PDFJS_VERSION}/pdfjs-$${PDFJS_VERSION}-dist.zip -o pdfjs.zip || echo Ready"
+	docker-compose exec drupal bash -lc "cd /var/www/drupal/web/libraries ; [ -f '/var/www/drupal/web/libraries/pdfjs.zip' ] && unzip pdfjs.zip -d /var/www/drupal/web/libraries/pdf.js || echo Ready"
+	docker-compose exec drupal bash -lc "[ -f '/var/www/drupal/web/libraries/pdfjs.zip' ] && rm -rf /var/www/drupal/web/libraries/pdfjs.zip || echo Zip file removed" 
+	docker-compose exec drupal bash -lc "[ -d '/var/www/drupal/web/libraries/pdf.js' ] && chmod -R 755 /var/www/drupal/web/libraries/pdf.js ; chown -R 1000:nginx /var/www/drupal/web/libraries/pdf.js"

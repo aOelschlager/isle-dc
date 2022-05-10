@@ -418,11 +418,7 @@ up:
 
 .PHONY: down
 .SILENT: down
-<<<<<<< HEAD
 ## Brings down the containers. Same as docker-compose down --remove-orphans
-=======
-## Shuts the system down without deleting any persistent data
->>>>>>> PHONY cleanup
 down:
 	-docker-compose down --remove-orphans
 

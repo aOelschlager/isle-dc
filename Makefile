@@ -300,12 +300,17 @@ reindex-triplestore:
 ## Helper to generate secrets & passwords, like so: make generate-secrets
 .SILENT: generate-secrets
 generate-secrets:
+ifeq ($(USE_SECRETS), false)
 	docker run --rm -t \
 		-v "$(CURDIR)/secrets":/secrets \
 		-v "$(CURDIR)/scripts/generate-secrets.sh":/generate-secrets.sh \
 		-w / \
 		--entrypoint bash \
 		$(REPOSITORY)/drupal:$(TAG) -c "/generate-secrets.sh && chown -R `id -u`:`id -g` /secrets"
+else
+	@echo "'Uses Secrets' is set to 'true'."
+	$(MAKE) secrets_warning
+endif
 
 .PHONY: download-default-certs
 ## Helper function to generate keys for the user to use in their docker-compose.env.yml
@@ -327,6 +332,27 @@ demo:
 	$(MAKE) demo_content
 	$(MAKE) login
 
+.PHONY: demo-legacy
+.SILENT: demo-legacy
+## Make a demo site using the assets provided in this repo.
+demo-legacy: generate-secrets
+	$(MAKE) download-default-certs ENVIROMENT=demo
+	$(MAKE) -B docker-compose.yml ENVIROMENT=demo
+	$(MAKE) pull ENVIROMENT=demo
+	mkdir -p "$(CURDIR)/codebase"
+	docker-compose up -d
+	$(MAKE) update-settings-php ENVIROMENT=demo
+	$(MAKE) drupal-public-files-import SRC="$(CURDIR)/demo-data/public-files.tgz" ENVIROMENT=demo
+	$(MAKE) drupal-database ENVIROMENT=demo
+	$(MAKE) drupal-database-import SRC="$(CURDIR)/demo-data/drupal.sql" ENVIROMENT=demo
+	$(MAKE) hydrate ENVIROMENT=demo
+	docker-compose exec -T drupal with-contenv bash -lc 'drush --root /var/www/drupal/web -l $${DRUPAL_DEFAULT_SITE_URL} upwd admin $${DRUPAL_DEFAULT_ACCOUNT_PASSWORD}'
+	$(MAKE) fcrepo-import SRC="$(CURDIR)/demo-data/fcrepo-export.tgz" ENVIROMENT=demo
+	$(MAKE) reindex-fcrepo-metadata ENVIROMENT=demo
+	$(MAKE) reindex-solr ENVIROMENT=demo
+	$(MAKE) reindex-triplestore ENVIROMENT=demo
+	$(MAKE) secrets_warning
+
 .PHONY: local
 ## Make a local site with codebase directory bind mounted.
 .SILENT: local
@@ -347,6 +373,7 @@ local: generate-secrets
 	docker-compose exec -T drupal with-contenv bash -lc "drush en -y search_api_solr_defaults islandora_defaults islandora_workbench_integration"
 	$(MAKE) hydrate ENVIRONMENT=local
 	$(MAKE) set-files-owner SRC="$(CURDIR)/codebase" ENVIROMENT=local
+	$(MAKE) secrets_warning
 	$(MAKE) login
 
 .PHONY: demo-install-profile
@@ -370,7 +397,6 @@ local-install-profile: generate-secrets
 	$(MAKE) set-files-owner SRC=$(CURDIR)/codebase ENVIROMENT=local
 	docker-compose up -d --remove-orphans
 	docker-compose exec -T drupal with-contenv bash -lc 'composer install; chown -R nginx:nginx .'
-
 	$(MAKE) remove_standard_profile_references_from_config drupal-database update-settings-php ENVIROMENT=local
 	docker-compose exec -T drupal with-contenv bash -lc "drush si -y islandora_install_profile_demo --account-pass $(shell cat secrets/live/DRUPAL_DEFAULT_ACCOUNT_PASSWORD)"
 	$(MAKE) delete-shortcut-entities && docker-compose exec -T drupal with-contenv bash -lc "drush pm:un -y shortcut"
@@ -400,6 +426,9 @@ ifeq ($(shell uname -s),Darwin)
 endif
 	cd islandora_workbench && docker build -t workbench-docker .
 	cd islandora_workbench && docker run -it --rm --network="host" -v $(shell pwd)/islandora_workbench:/workbench --name my-running-workbench workbench-docker bash -lc "(cd /workbench && python setup.py install 2>&1 && ./workbench --config demoBDcreate_all_localhost.yml)"
+	$(MAKE) reindex-fcrepo-metadata ENVIROMENT=demo
+	$(MAKE) reindex-solr ENVIROMENT=demo
+	$(MAKE) reindex-triplestore ENVIROMENT=demo
 
 .PHONY: clean
 .SILENT: clean
@@ -419,6 +448,7 @@ up:
 	@echo "\n Sleeping for 10 seconds to wait for Drupal to finish building.\n"
 	sleep 10
 	docker-compose exec -T drupal with-contenv bash -lc "for_all_sites update_settings_php"
+	$(MAKE) secrets_warning
 
 .PHONY: down
 .SILENT: down
@@ -475,6 +505,13 @@ help:
 		} \
 	} \
 	{lastLine = $$0}' $(MAKEFILE_LIST)
+
+.PHONY: secrets_warning
+.SILENT: secrets_warning
+## Check to see if the secrets directory contains default secrets.
+secrets_warning:
+	@echo 'Starting scripts/check-secrets.sh'
+	@bash scripts/check-secrets.sh || (echo "check-secrets exited $$?"; exit 1)
 
 IS_DRUPAL_PSSWD_FILE_READABLE := $(shell test -r secrets/live/DRUPAL_DEFAULT_ACCOUNT_PASSWORD -a -w secrets/live/DRUPAL_DEFAULT_ACCOUNT_PASSWORD && echo 1 || echo 0)
 CMD := $(shell [ $(IS_DRUPAL_PSSWD_FILE_READABLE) -eq 1 ] && echo 'tee' || echo 'sudo -k tee')

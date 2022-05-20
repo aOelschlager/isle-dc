@@ -332,27 +332,6 @@ demo:
 	$(MAKE) demo_content
 	$(MAKE) login
 
-.PHONY: demo-legacy
-.SILENT: demo-legacy
-## Make a demo site using the assets provided in this repo.
-demo-legacy: generate-secrets
-	$(MAKE) download-default-certs ENVIROMENT=demo
-	$(MAKE) -B docker-compose.yml ENVIROMENT=demo
-	$(MAKE) pull ENVIROMENT=demo
-	mkdir -p "$(CURDIR)/codebase"
-	docker-compose up -d
-	$(MAKE) update-settings-php ENVIROMENT=demo
-	$(MAKE) drupal-public-files-import SRC="$(CURDIR)/demo-data/public-files.tgz" ENVIROMENT=demo
-	$(MAKE) drupal-database ENVIROMENT=demo
-	$(MAKE) drupal-database-import SRC="$(CURDIR)/demo-data/drupal.sql" ENVIROMENT=demo
-	$(MAKE) hydrate ENVIROMENT=demo
-	docker-compose exec -T drupal with-contenv bash -lc 'drush --root /var/www/drupal/web -l $${DRUPAL_DEFAULT_SITE_URL} upwd admin $${DRUPAL_DEFAULT_ACCOUNT_PASSWORD}'
-	$(MAKE) fcrepo-import SRC="$(CURDIR)/demo-data/fcrepo-export.tgz" ENVIROMENT=demo
-	$(MAKE) reindex-fcrepo-metadata ENVIROMENT=demo
-	$(MAKE) reindex-solr ENVIROMENT=demo
-	$(MAKE) reindex-triplestore ENVIROMENT=demo
-	$(MAKE) secrets_warning
-
 .PHONY: local
 ## Make a local site with codebase directory bind mounted.
 .SILENT: local
@@ -426,7 +405,7 @@ ifeq ($(shell uname -s),Darwin)
 endif
 	cd islandora_workbench && docker build -t workbench-docker .
 	cd islandora_workbench && docker run -it --rm --network="host" -v $(shell pwd)/islandora_workbench:/workbench --name my-running-workbench workbench-docker bash -lc "(cd /workbench && python setup.py install 2>&1 && ./workbench --config demoBDcreate_all_localhost.yml)"
-	$(MAKE) reindex-solr ENVIROMENT=demo
+	$(MAKE) reindex-solr
 
 .PHONY: clean
 .SILENT: clean

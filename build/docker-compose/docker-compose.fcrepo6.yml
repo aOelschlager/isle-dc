@@ -28,6 +28,7 @@ services:
       - traefik.http.services.${COMPOSE_PROJECT_NAME-isle-dc}-fcrepo.loadbalancer.server.port=8080
       - traefik.http.routers.${COMPOSE_PROJECT_NAME-isle-dc}-fcrepo_http.service=${COMPOSE_PROJECT_NAME-isle-dc}-fcrepo
       - traefik.http.routers.${COMPOSE_PROJECT_NAME-isle-dc}-fcrepo_http.entrypoints=fcrepo
+      - traefik.http.routers.${COMPOSE_PROJECT_NAME-isle-dc}-fcrepo_http.rule=Host(`${DOMAIN}`)
     deploy:
       resources:
           limits:

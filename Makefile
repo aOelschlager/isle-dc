@@ -15,7 +15,6 @@ endif
 # users to regenerate their .env files losing their changes.
 include sample.env
 include $(ENV_FILE)
-
 # The site to operate on when using drush -l $(SITE) commands
 SITE?=default
 
@@ -89,8 +88,8 @@ SERVICES := $(REQUIRED_SERVICES) $(FCREPO_SERVICE) $(WATCHTOWER_SERVICE) $(ETCD_
 default: download-default-certs docker-compose.yml pull
 
 .SILENT: docker-compose.yml
-docker-compose.yml: $(SERVICES:%=docker-compose.%.yml) .env
-	docker-compose $(SERVICES:%=-f docker-compose.%.yml) config > docker-compose.yml
+docker-compose.yml: $(SERVICES:%=build/docker-compose/docker-compose.%.yml) .env
+	docker-compose $(SERVICES:%=-f build/docker-compose/docker-compose.%.yml) config > docker-compose.yml
 
 .PHONY: pull
 ## Fetches the latest images from the registry.
@@ -303,7 +302,7 @@ generate-secrets:
 ifeq ($(USE_SECRETS), false)
 	docker run --rm -t \
 		-v "$(CURDIR)/secrets":/secrets \
-		-v "$(CURDIR)/scripts/generate-secrets.sh":/generate-secrets.sh \
+		-v "$(CURDIR)/build/scripts/generate-secrets.sh":/generate-secrets.sh \
 		-w / \
 		--entrypoint bash \
 		$(REPOSITORY)/drupal:$(TAG) -c "/generate-secrets.sh && chown -R `id -u`:`id -g` /secrets"
@@ -326,10 +325,31 @@ download-default-certs:
 
 .PHONY: demo
 .SILENT: demo
+<<<<<<< HEAD
 ## Make a local site with some demo content
 demo:
 	$(MAKE) local
 	$(MAKE) demo_content
+=======
+## Make a demo site.
+demo: generate-secrets
+	$(MAKE) download-default-certs ENVIROMENT=demo
+	$(MAKE) -B docker-compose.yml ENVIROMENT=demo
+	$(MAKE) pull ENVIROMENT=demo
+	mkdir -p "$(CURDIR)/codebase"
+	docker-compose up -d
+	$(MAKE) update-settings-php ENVIROMENT=demo
+	$(MAKE) drupal-public-files-import SRC="$(CURDIR)/build/demo-data/public-files.tgz" ENVIROMENT=demo
+	$(MAKE) drupal-database ENVIROMENT=demo
+	$(MAKE) drupal-database-import SRC="$(CURDIR)/build/demo-data/drupal.sql" ENVIROMENT=demo
+	$(MAKE) hydrate ENVIROMENT=demo
+	docker-compose exec -T drupal with-contenv bash -lc 'drush --root /var/www/drupal/web -l $${DRUPAL_DEFAULT_SITE_URL} upwd admin $${DRUPAL_DEFAULT_ACCOUNT_PASSWORD}'
+	$(MAKE) fcrepo-import SRC="$(CURDIR)/build/demo-data/fcrepo-export.tgz" ENVIROMENT=demo
+	$(MAKE) reindex-fcrepo-metadata ENVIROMENT=demo
+	$(MAKE) reindex-solr ENVIROMENT=demo
+	$(MAKE) reindex-triplestore ENVIROMENT=demo
+	$(MAKE) secrets_warning
+>>>>>>> upstream/fixing_initial_install_options
 	$(MAKE) login
 
 .PHONY: local
@@ -376,6 +396,10 @@ local-install-profile: generate-secrets
 	$(MAKE) set-files-owner SRC=$(CURDIR)/codebase ENVIROMENT=local
 	docker-compose up -d --remove-orphans
 	docker-compose exec -T drupal with-contenv bash -lc 'composer install; chown -R nginx:nginx .'
+<<<<<<< HEAD
+=======
+
+>>>>>>> upstream/fixing_initial_install_options
 	$(MAKE) remove_standard_profile_references_from_config drupal-database update-settings-php ENVIROMENT=local
 	docker-compose exec -T drupal with-contenv bash -lc "drush si -y islandora_install_profile_demo --account-pass $(shell cat secrets/live/DRUPAL_DEFAULT_ACCOUNT_PASSWORD)"
 	$(MAKE) delete-shortcut-entities && docker-compose exec -T drupal with-contenv bash -lc "drush pm:un -y shortcut"
@@ -384,8 +408,13 @@ local-install-profile: generate-secrets
 	-docker-compose exec -T drupal with-contenv bash -lc 'mkdir -p /var/www/drupal/config/sync && chmod -R 775 /var/www/drupal/config/sync'
 	#docker-compose exec -T drupal with-contenv bash -lc 'chown -R `id -u`:nginx /var/www/drupal'
 	#docker-compose exec -T drupal with-contenv bash -lc 'drush migrate:rollback islandora_defaults_tags,islandora_tags'
+<<<<<<< HEAD
 	curl -k -u admin:$(shell cat secrets/live/DRUPAL_DEFAULT_ACCOUNT_PASSWORD) -H "Content-Type: application/json" -d "@demo-data/homepage.json" https://${DOMAIN}/node?_format=json
 	curl -k -u admin:$(shell cat secrets/live/DRUPAL_DEFAULT_ACCOUNT_PASSWORD) -H "Content-Type: application/json" -d "@demo-data/browse-collections.json" https://${DOMAIN}/node?_format=json
+=======
+	curl -k -u admin:$(shell cat secrets/live/DRUPAL_DEFAULT_ACCOUNT_PASSWORD) -H "Content-Type: application/json" -d "@build/demo-data/homepage.json" https://${DOMAIN}/node?_format=json
+	curl -k -u admin:$(shell cat secrets/live/DRUPAL_DEFAULT_ACCOUNT_PASSWORD) -H "Content-Type: application/json" -d "@build/demo-data/browse-collections.json" https://${DOMAIN}/node?_format=json
+>>>>>>> upstream/fixing_initial_install_options
 	$(MAKE) login
 
 .PHONY: demo_content
@@ -487,8 +516,8 @@ help:
 .SILENT: secrets_warning
 ## Check to see if the secrets directory contains default secrets.
 secrets_warning:
-	@echo 'Starting scripts/check-secrets.sh'
-	@bash scripts/check-secrets.sh || (echo "check-secrets exited $$?"; exit 1)
+	@echo 'Starting build/scripts/check-secrets.sh'
+	@bash build/scripts/check-secrets.sh || (echo "check-secrets exited $$?"; exit 1)
 
 IS_DRUPAL_PSSWD_FILE_READABLE := $(shell test -r secrets/live/DRUPAL_DEFAULT_ACCOUNT_PASSWORD -a -w secrets/live/DRUPAL_DEFAULT_ACCOUNT_PASSWORD && echo 1 || echo 0)
 CMD := $(shell [ $(IS_DRUPAL_PSSWD_FILE_READABLE) -eq 1 ] && echo 'tee' || echo 'sudo -k tee')

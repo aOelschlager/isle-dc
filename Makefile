@@ -462,7 +462,7 @@ clean:
 	echo "**DANGER** About to rm your SERVER data subdirs, your docker volumes and your codebase/web"
 	$(MAKE) confirm
 	-docker-compose down -v
-	sudo rm -fr codebase islandora_workbench certs secrets/live/*
+	sudo rm -fr codebase islandora_workbench certs
 	git clean -xffd .
 
 .PHONY: up

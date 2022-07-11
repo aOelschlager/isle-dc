@@ -420,7 +420,6 @@ local-part-one:
 ## Make a local site with codebase directory bind mounted, modeled after sandbox.islandora.ca
 ## Run this after the Traefik container is created
 local-part-two:
-	#TODO restart drupal
 	docker-compose exec -T drupal with-contenv bash -lc 'composer install; chown -R nginx:nginx .'
 	$(MAKE) remove_standard_profile_references_from_config drupal-database update-settings-php ENVIROMENT=local
 	docker-compose exec -T drupal with-contenv bash -lc "drush si -y islandora_install_profile_demo --account-pass $(shell cat secrets/live/DRUPAL_DEFAULT_ACCOUNT_PASSWORD)"

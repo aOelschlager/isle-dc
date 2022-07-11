@@ -406,7 +406,7 @@ local-install-profile: generate-secrets
 .PHONY: local-part-one
 ## Make a local site with codebase directory bind mounted, modeled after sandbox.islandora.ca
 ## Run this before the Traefik container is created
-local-part-one:
+local-part-one: generate-secrets
 	$(MAKE) -B docker-compose.yml ENVIRONMENT=local
 	$(MAKE) pull ENVIRONMENT=local
 	mkdir -p $(CURDIR)/codebase

@@ -325,12 +325,11 @@ download-default-certs:
 
 .PHONY: demo
 .SILENT: demo
-<<<<<<< HEAD
 ## Make a local site with some demo content
 demo:
 	$(MAKE) local
 	$(MAKE) demo_content
-=======
+
 ## Make a demo site.
 demo: generate-secrets
 	$(MAKE) download-default-certs ENVIROMENT=demo
@@ -349,7 +348,6 @@ demo: generate-secrets
 	$(MAKE) reindex-solr ENVIROMENT=demo
 	$(MAKE) reindex-triplestore ENVIROMENT=demo
 	$(MAKE) secrets_warning
->>>>>>> upstream/fixing_initial_install_options
 	$(MAKE) login
 
 .PHONY: local

@@ -410,6 +410,39 @@ local-install-profile: generate-secrets
 	curl -k -u admin:$(shell cat secrets/live/DRUPAL_DEFAULT_ACCOUNT_PASSWORD) -H "Content-Type: application/json" -d "@build/demo-data/browse-collections.json" https://${DOMAIN}/node?_format=json
 	$(MAKE) login
 
+.PHONY: local-part-one
+## Make a local site with codebase directory bind mounted, modeled after sandbox.islandora.ca
+## Run this before the Traefik container is created
+local-part-one:
+	$(MAKE) -B docker-compose.yml ENVIRONMENT=local
+	$(MAKE) pull ENVIRONMENT=local
+	mkdir -p $(CURDIR)/codebase
+	if [ -z "$$(ls -A $(CURDIR)/codebase)" ]; then \
+		docker container run --rm -v $(CURDIR)/codebase:/home/root $(REPOSITORY)/nginx:$(TAG) with-contenv bash -lc 'git clone https://github.com/islandora-devops/islandora-sandbox /tmp/codebase; mv /tmp/codebase/* /home/root;'; \
+	fi
+	$(MAKE) set-files-owner SRC=$(CURDIR)/codebase ENVIROMENT=local
+	docker-compose up -d --remove-orphans
+	
+.PHONY: local-part-two
+## Make a local site with codebase directory bind mounted, modeled after sandbox.islandora.ca
+## Run this after the Traefik container is created
+local-part-two:
+	#TODO restart drupal
+	docker-compose exec -T drupal with-contenv bash -lc 'composer install; chown -R nginx:nginx .'
+	$(MAKE) remove_standard_profile_references_from_config drupal-database update-settings-php ENVIROMENT=local
+	docker-compose exec -T drupal with-contenv bash -lc "drush si -y islandora_install_profile_demo --account-pass $(shell cat secrets/live/DRUPAL_DEFAULT_ACCOUNT_PASSWORD)"
+	$(MAKE) delete-shortcut-entities && docker-compose exec -T drupal with-contenv bash -lc "drush pm:un -y shortcut"
+	docker-compose exec -T drupal with-contenv bash -lc "drush en -y migrate_tools"
+	$(MAKE) hydrate ENVIRONMENT=local
+	-docker-compose exec -T drupal with-contenv bash -lc 'mkdir -p /var/www/drupal/config/sync && chmod -R 775 /var/www/drupal/config/sync'
+	#docker-compose exec -T drupal with-contenv bash -lc 'chown -R `id -u`:nginx /var/www/drupal'
+	#docker-compose exec -T drupal with-contenv bash -lc 'drush migrate:rollback islandora_defaults_tags,islandora_tags'
+	#curl -k -u admin:$(shell cat secrets/live/DRUPAL_DEFAULT_ACCOUNT_PASSWORD) -H "Content-Type: application/json" -d "@demo-data/homepage.json" https://${DOMAIN}/node?_format=json
+	#curl -k -u admin:$(shell cat secrets/live/DRUPAL_DEFAULT_ACCOUNT_PASSWORD) -H "Content-Type: application/json" -d "@demo-data/browse-collections.json" https://${DOMAIN}/node?_format=json
+	#curl -k -u admin:$(shell cat secrets/live/DRUPAL_DEFAULT_ACCOUNT_PASSWORD) -H "Content-Type: application/json" -d "@build/demo-data/homepage.json" https://${DOMAIN}/node?_format=json
+	#curl -k -u admin:$(shell cat secrets/live/DRUPAL_DEFAULT_ACCOUNT_PASSWORD) -H "Content-Type: application/json" -d "@build/demo-data/browse-collections.json" https://${DOMAIN}/node?_format=json
+	#$(MAKE) login
+
 .PHONY: demo_content
 ## Helper function for demo sites: do a workbench import of sample objects
 demo_content:

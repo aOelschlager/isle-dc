@@ -1,0 +1,30 @@
+version: "3.7"
+networks:
+  isle-dc-one_default:
+    external: true
+    name: ${NETWORK_DEFAULT}
+  isle-dc-one_gateway:
+    external: true
+    name: ${NETWORK_GATEWAY}
+volumes:
+  blazegraph-data:
+services:
+  blazegraph:
+    restart: ${RESTART_POLICY:-unless-stopped}
+    image: ${REPOSITORY:-islandora}/blazegraph:${TAG:-latest}
+    volumes:
+      - blazegraph-data:/data
+    networks:
+      isle-dc-one_default:
+    labels:
+      - traefik.enable=${EXPOSE_BLAZEGRAPH:-false}
+      - traefik.http.services.${COMPOSE_PROJECT_NAME-isle-dc}-blazegraph.loadbalancer.server.port=8080
+      - traefik.http.routers.${COMPOSE_PROJECT_NAME-isle-dc}-blazegraph_http.service=${COMPOSE_PROJECT_NAME-isle-dc}-blazegraph
+      - traefik.http.routers.${COMPOSE_PROJECT_NAME-isle-dc}-blazegraph_http.entrypoints=blazegraph
+      - traefik.http.routers.${COMPOSE_PROJECT_NAME-isle-dc}-blazegraph_http.rule=Host(`${DOMAIN}`)
+    deploy:
+      resources:
+          limits:
+            memory: ${BLAZEGRAPH_MEMORY_LIMIT:-5G}
+          reservations:
+            memory: 2G

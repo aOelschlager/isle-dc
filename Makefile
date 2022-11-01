@@ -347,27 +347,33 @@ demo: generate-secrets
 ## Make a local site with codebase directory bind mounted, modeled after sandbox.islandora.ca
 local: QUOTED_CURDIR = "$(CURDIR)"
 local: generate-secrets
-	$(MAKE) download-default-certs ENVIRONMENT=local
-	$(MAKE) -B docker-compose.yml ENVIRONMENT=local
-	$(MAKE) pull ENVIRONMENT=local
-	mkdir -p $(CURDIR)/codebase
-	if [ -z "$$(ls -A $(QUOTED_CURDIR)/codebase)" ]; then \
-		docker container run --rm -v $(CURDIR)/codebase:/home/root $(REPOSITORY)/nginx:$(TAG) with-contenv bash -lc 'git clone -b main-dev-test https://github.com/aOelschlager/islandora-sandbox /tmp/codebase; mv /tmp/codebase/* /home/root;'; \
-	fi
-	$(MAKE) set-files-owner SRC=$(CURDIR)/codebase ENVIRONMENT=local
-	docker-compose up -d --remove-orphans
-	docker-compose exec -T drupal with-contenv bash -lc 'composer install; chown -R nginx:nginx .'
-	$(MAKE) remove_standard_profile_references_from_config drupal-database update-settings-php ENVIRONMENT=local
-	docker-compose exec -T drupal with-contenv bash -lc "drush si -y islandora_install_profile_demo --account-pass $(shell cat secrets/live/DRUPAL_DEFAULT_ACCOUNT_PASSWORD)"
-	$(MAKE) delete-shortcut-entities && docker-compose exec -T drupal with-contenv bash -lc "drush pm:un -y shortcut"
-	docker-compose exec -T drupal with-contenv bash -lc "drush en -y migrate_tools"
-	$(MAKE) hydrate ENVIRONMENT=local
-	-docker-compose exec -T drupal with-contenv bash -lc 'mkdir -p /var/www/drupal/config/sync && chmod -R 775 /var/www/drupal/config/sync'
+	$(MAKE) download-default-certs ENVIROMENT=local
+	#$(MAKE) -B docker-compose.yml ENVIRONMENT=local
+	#$(MAKE) pull ENVIRONMENT=local
+	#mkdir -p $(CURDIR)/codebase
+	#if [ -z "$$(ls -A $(QUOTED_CURDIR)/codebase)" ]; then \
+	#	docker container run --rm -v $(CURDIR)/codebase:/home/root $(REPOSITORY)/nginx:$(TAG) with-contenv bash -lc 'git clone -b main-dev-test https://github.com/aOelschlager/islandora-sandbox.git /tmp/codebase; mv /tmp/codebase/* /home/root;'; \
+	#fi
+	#$(MAKE) set-files-owner SRC=$(CURDIR)/codebase ENVIROMENT=local
+	#docker-compose up -d --remove-orphans
+	#docker-compose exec -T drupal with-contenv bash -lc 'composer install; chown -R nginx:nginx .'
+	#$(MAKE) remove_standard_profile_references_from_config ENVIROMENT=local
+	#$(MAKE) drupal-database ENVIROMENT=local
+	#$(MAKE) update-settings-php ENVIROMENT=local
+	#docker-compose exec -T drupal with-contenv bash -lc "drush si -y islandora_install_profile_demo --account-pass $(shell cat secrets/live/DRUPAL_DEFAULT_ACCOUNT_PASSWORD)"
+	#$(MAKE) delete-shortcut-entities && docker-compose exec -T drupal with-contenv bash -lc "drush pm:un -y shortcut"
+	#docker-compose exec -T drupal with-contenv bash -lc "drush en -y migrate_tools"
+	#$(MAKE) update-config-from-environment 
+	#$(MAKE) solr-cores
+	#$(MAKE) namespaces
+	#$(MAKE) run-islandora-migrations
+	#$(MAKE) hydrate ENVIRONMENT=local
+	#-docker-compose exec -T drupal with-contenv bash -lc 'mkdir -p /var/www/drupal/config/sync && chmod -R 775 /var/www/drupal/config/sync'
 	#docker-compose exec -T drupal with-contenv bash -lc 'chown -R `id -u`:nginx /var/www/drupal'
 	#docker-compose exec -T drupal with-contenv bash -lc 'drush migrate:rollback islandora_defaults_tags,islandora_tags'
-	curl -k -u admin:$(shell cat secrets/live/DRUPAL_DEFAULT_ACCOUNT_PASSWORD) -H "Content-Type: application/json" -d "@build/demo-data/homepage.json" https://${DOMAIN}/node?_format=json
-	curl -k -u admin:$(shell cat secrets/live/DRUPAL_DEFAULT_ACCOUNT_PASSWORD) -H "Content-Type: application/json" -d "@build/demo-data/browse-collections.json" https://${DOMAIN}/node?_format=json
-	$(MAKE) login
+	#curl -k -u admin:$(shell cat secrets/live/DRUPAL_DEFAULT_ACCOUNT_PASSWORD) -H "Content-Type: application/json" -d "@build/demo-data/homepage.json" https://${DOMAIN}/node?_format=json
+	#curl -k -u admin:$(shell cat secrets/live/DRUPAL_DEFAULT_ACCOUNT_PASSWORD) -H "Content-Type: application/json" -d "@build/demo-data/browse-collections.json" https://${DOMAIN}/node?_format=json
+	#$(MAKE) login
 
 .PHONY: demo_content
 #.SILENT: demo_content

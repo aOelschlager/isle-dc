@@ -12,6 +12,7 @@ services:
     image: ${REPOSITORY:-islandora}/matomo:${TAG:-latest}
     environment:
       MATOMO_DEFAULT_HOST: ${DOMAIN}
+      MATOMO_SITE_DIMES_HOST: ${DOMAINTWO}
     volumes:
       - matomo-config-data:/var/www/matomo
     depends_on:
@@ -26,13 +27,13 @@ services:
       - traefik.http.middlewares.${COMPOSE_PROJECT_NAME-isle-dc}-matomo-redirectscheme.redirectscheme.permanent=true
       - traefik.http.routers.${COMPOSE_PROJECT_NAME-isle-dc}-matomo_http.service=${COMPOSE_PROJECT_NAME-isle-dc}-matomo
       - traefik.http.routers.${COMPOSE_PROJECT_NAME-isle-dc}-matomo_http.entrypoints=http
-      - traefik.http.routers.${COMPOSE_PROJECT_NAME-isle-dc}-matomo_http.rule=Host(`${DOMAIN}`) && PathPrefix(`/matomo`)
+      - traefik.http.routers.${COMPOSE_PROJECT_NAME-isle-dc}-matomo_http.rule=Host(`${DOMAIN}`,`${DOMAINTWO}`) && PathPrefix(`/matomo`)
       - traefik.http.routers.${COMPOSE_PROJECT_NAME-isle-dc}-matomo_http.middlewares=${COMPOSE_PROJECT_NAME-isle-dc}-matomo-redirectscheme
       - traefik.http.middlewares.${COMPOSE_PROJECT_NAME-isle-dc}-matomo-stripprefix.stripprefix.prefixes=/matomo
       - traefik.http.middlewares.${COMPOSE_PROJECT_NAME-isle-dc}-matomo-customrequestheaders.headers.customrequestheaders.X-Forwarded-Uri=/matomo
       - traefik.http.middlewares.${COMPOSE_PROJECT_NAME-isle-dc}-matomo.chain.middlewares=${COMPOSE_PROJECT_NAME-isle-dc}-matomo-stripprefix,${COMPOSE_PROJECT_NAME-isle-dc}-matomo-customrequestheaders
       - traefik.http.routers.${COMPOSE_PROJECT_NAME-isle-dc}-matomo_https.entrypoints=https
-      - traefik.http.routers.${COMPOSE_PROJECT_NAME-isle-dc}-matomo_https.rule=Host(`${DOMAIN}`) && PathPrefix(`/matomo`)
+      - traefik.http.routers.${COMPOSE_PROJECT_NAME-isle-dc}-matomo_https.rule=Host(`${DOMAIN}`,`${DOMAINTWO}`) && PathPrefix(`/matomo`)
       - traefik.http.routers.${COMPOSE_PROJECT_NAME-isle-dc}-matomo_https.tls=true
       - traefik.http.routers.${COMPOSE_PROJECT_NAME-isle-dc}-matomo_https.middlewares=${COMPOSE_PROJECT_NAME-isle-dc}-matomo
     deploy:

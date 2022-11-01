@@ -18,6 +18,7 @@ services:
       - traefik.http.services.${COMPOSE_PROJECT_NAME-isle-dc}-activemq.loadbalancer.server.port=8161
       - traefik.http.routers.${COMPOSE_PROJECT_NAME-isle-dc}-activemq_http.service=${COMPOSE_PROJECT_NAME-isle-dc}-activemq
       - traefik.http.routers.${COMPOSE_PROJECT_NAME-isle-dc}-activemq_http.entrypoints=activemq
+      - traefik.http.routers.${COMPOSE_PROJECT_NAME-isle-dc}-activemq_http.rule=Host(`${DOMAIN}`,`${DOMAINTWO}`)
     networks:
       default:
     deploy:

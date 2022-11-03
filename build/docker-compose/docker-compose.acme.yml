@@ -22,7 +22,7 @@ services:
       - --providers.docker.network=gateway
       - --providers.docker.exposedByDefault=false
       - --providers.file.filename=/etc/traefik/tls.yml
-      - '--providers.docker.defaultRule=Host(`${DOMAIN}`)'
+      #- '--providers.docker.defaultRule=Host(`${DOMAIN}`)'
       - --certificatesresolvers.myresolver.acme.httpchallenge=true
       - --certificatesresolvers.myresolver.acme.httpchallenge.entrypoint=http
       - --certificatesresolvers.myresolver.acme.email=${ACME_EMAIL-your-email@example.com}

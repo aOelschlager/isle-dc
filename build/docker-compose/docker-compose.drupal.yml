@@ -18,7 +18,6 @@ services:
       DRUPAL_DEFAULT_MATOMO_URL: https://${DOMAIN}/matomo/
       DRUPAL_DEFAULT_SITE_URL: http://${DOMAIN} # Make sure this is just http and not https!
       DRUPAL_DEFAULT_PROFILE: ${DRUPAL_INSTALL_PROFILE}
-      DRUPAL_SITE_DIMES_NAME: islandoratwotwo.traefik.me
       DRUPAL_SITE_DIMES_NAME: dimes.traefik.me
       DRUPAL_SITE_DIMES_CANTALOUPE_URL: https://${DOMAINTWO}/cantaloupe/iiif/2
       DRUPAL_SITE_DIMES_FCREPO_HOST: ${DOMAINTWO}
